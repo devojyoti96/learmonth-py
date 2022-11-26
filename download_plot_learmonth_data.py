@@ -4,6 +4,8 @@ from scipy.signal import medfilt
 from scipy import interpolate
 import matplotlib.dates as md
 from optparse import OptionParser
+from matplotlib.patches import *
+from collections import OrderedDict
 
 def call_python_version(Version, Module, Function, ArgumentList):
 	'''
@@ -62,7 +64,7 @@ def backsub(data):
 	return data
     	
 
-def srs_to_pd(srs_file,pd_file,bkg_sub=False,do_flag=True):	
+def srs_to_pd(srs_file,pd_file,bkg_sub=False,do_flag=True,flag_cal_time=True):	
 	'''
 	Function to conver Learmonth SRS datafile into pandas dataframe
 	Parameters
@@ -75,6 +77,8 @@ def srs_to_pd(srs_file,pd_file,bkg_sub=False,do_flag=True):
 		Do background subtraction or not
 	do_flag : bool
 		Flag bad data or not
+	flag_cal_time : bool
+		Flag cal time or not
 	Returns
 	-------
 	str
@@ -103,7 +107,8 @@ def srs_to_pd(srs_file,pd_file,bkg_sub=False,do_flag=True):
 	full_band_data=full_band_data.sort_index(0) 
 	full_band_data=full_band_data.sort_index(1)
 	full_band_data=full_band_data.transpose()
-
+	freqs=full_band_data.index
+	#print (freqs)
 	final_data=full_band_data.to_numpy().astype('float')
 	# Flagging bad channels
 	if do_flag:
@@ -122,21 +127,30 @@ def srs_to_pd(srs_file,pd_file,bkg_sub=False,do_flag=True):
 		final_data[410:416,:]=np.nan
 		final_data[730:741,:]=np.nan
 		final_data[635:645,:]=np.nan
+		final_data[283:292,:]=np.nan
+		final_data[216:222,:]=np.nan
+		final_data[590:602,:]=np.nan
+		final_data[663:667,:]=np.nan
+		final_data[684:690,:]=np.nan
+		final_data[63:66,:]=np.nan
+		final_data[54:59,:]=np.nan
+		final_data[27:31,:]=np.nan
 		# Flagging calibration times
-		y=np.nanmedian(final_data,axis=0)
-		c=y/medfilt(y,1001)
-		c_std=np.nanstd(c)
-		pos=np.where(c>1+(10*c_std))
-		final_data[...,pos]=np.nan
+		if flag_cal_time:
+			y=np.nanmedian(final_data,axis=0)
+			c=y/medfilt(y,1001)
+			c_std=np.nanstd(c)
+			pos=np.where(c>1+(10*c_std))
+			final_data[...,pos]=np.nan
 	for i in range(final_data.shape[1]):
 		final_data[:,i]=fill_nan(final_data[:,i])
 	if do_flag:
 		final_data[780:,:]=np.nan #Flag edge channels	
 	if bkg_sub:
 		final_data=backsub(final_data)
+	
 	full_band_data=pd.DataFrame(final_data,index=freqs,columns=timestamps)  
 	full_band_data.to_pickle(pd_file+'.pd')
-	
 	return pd_file+'.pd'
 	
 	
@@ -179,7 +193,6 @@ def plot_learmonth_DS(pd_file,save_file='',start_time='',end_time=''):
 		sel_timestamps=timestamps	
 	sel_data=pd_data[sel_timestamps]	
 	matplotlib.rcParams.update({'font.size': 15})
-	plt.style.use('seaborn-colorblind')
 	freq_ind=[]
 	freq_list=[]
 	time_ind=[]
@@ -191,16 +204,25 @@ def plot_learmonth_DS(pd_file,save_file='',start_time='',end_time=''):
 	for i in range(0,len(freqs),int(len(freqs)/10)): 
 		freq_ind.append(i) 
 		freq_list.append(freqs[i])
-	plt.figure(figsize=(20,8))
+	fig,ax=plt.subplots(figsize=(12,8))
 	s=sns.heatmap(sel_data,robust=True,cbar_kws={'label': 'Flux density (arbitrary unit)'},rasterized=True)
 	s.invert_yaxis()
+	'''freqs=np.array(sorted(freqs))
+	freq_res=(np.max(freqs)-np.min(freqs))/len(freqs)
+	time_res=3#(18)/len(timestamps)
+	ax.add_patch(Rectangle((int((6*60)/time_res), np.argmin(np.abs((62*1.28)-freqs))), int((8*60)/time_res), 2*int(1.28/freq_res) ,edgecolor='white',fill=False))
+	ax.add_patch(Rectangle((int((6*60)/time_res), np.argmin(np.abs((69*1.28)-freqs))), int((8*60)/time_res), 2*int(1.28/freq_res) ,edgecolor='white',fill=False))
+	ax.add_patch(Rectangle((int((6*60)/time_res), np.argmin(np.abs((76*1.28)-freqs))), int((8*60)/time_res), 2*int(1.28/freq_res) ,edgecolor='white',fill=False))
+	ax.add_patch(Rectangle((int((6*60)/time_res), np.argmin(np.abs((84*1.28)-freqs))), int((8*60)/time_res), 2*int(1.28/freq_res) ,edgecolor='white',fill=False))
+	ax.add_patch(Rectangle((int((6*60)/time_res), np.argmin(np.abs((93*1.28)-freqs))), int((8*60)/time_res), 2*int(1.28/freq_res) ,edgecolor='white',fill=False))
+	ax.add_patch(Rectangle((int((6*60)/time_res), np.argmin(np.abs((103*1.28)-freqs))), int((8*60)/time_res), 2*int(1.28/freq_res) ,edgecolor='white',fill=False))'''
 	plt.yticks(freq_ind[:-1],freq_list[:-1])
 	plt.xticks(time_ind[:-1],time_list[:-1],rotation=30)
 	plt.xlabel('Timestamp (UTC)')
 	plt.ylabel('Frequency (MHz)')
 	t=timestamps[int(len(timestamps)/2)] 
 	datestamp=t.date()
-	plt.title('Learmonth Spectrograph\nDate : '+str(t.day)+' '+t.month_name()+' '+str(t.year))
+	plt.title('Learmonth spectrograph dynamic spectrum\nDate : '+str(t.day)+' '+t.month_name()+' '+str(t.year))
 	plt.tight_layout()
 	plt.savefig(save_file)
 	plt.show() 
@@ -255,22 +277,26 @@ def main():
 	parser.add_option('--endtime',dest="end_time",default=None,help="End time of the dynamic spectrum",metavar="Datetime String (format : dd-mm-yyyy hh:mm:ss)")
 	parser.add_option('--background_subtract',dest="bkg_sub",default=False,help="Perform background subtraction",metavar="Boolean")
 	parser.add_option('--flag',dest="flag",default=True,help="Perform flagging",metavar="Boolean")
+	parser.add_option('--flag_caltime',dest="flag_caltime",default=True,help="Perform cal time flagging",metavar="Boolean")
+	parser.add_option('--overwrite',dest="overwrite",default=False,help="Overwrite exsisting pd file",metavar="Boolean")
 	parser.add_option('--plot_format',dest="ext",default='pdf',help="Final dynamic spectrum format",metavar="String (pdf,png,jpg,eps)")
 	(options, args) = parser.parse_args()	
 	
 	srs_file=download_learmonth(start_time=options.start_time,end_time=options.end_time)
 	print ('Downloaded SRS file : '+srs_file+'\n')
 	pd_file=srs_file.split('.srs')[0]
-	if os.path.exists(pd_file+'.pd')==False:
-		pd_file=srs_to_pd(srs_file,pd_file,bkg_sub=eval(str(options.bkg_sub)),do_flag=eval(str(options.flag)))
+	if os.path.exists(pd_file+'.pd')==False or eval(str(options.overwrite))==True:
+		pd_file=srs_to_pd(srs_file,pd_file,bkg_sub=eval(str(options.bkg_sub)),do_flag=eval(str(options.flag)),flag_cal_time=eval(str(options.flag_caltime)))
 	else:
 		pd_file=pd_file+'.pd'
 	print ('Pandas datafile : '+pd_file+'\n')
-	save_file=srs_file.split('.srs')[0]+str(options.ext)
+	save_file=srs_file.split('.srs')[0]+'.'+str(options.ext)
 	final_plot=plot_learmonth_DS(pd_file,save_file=save_file,start_time=options.start_time,end_time=options.end_time)
 	print ('Dynamic spectrum saved at : '+final_plot+'\n')
 	
 	
+	coarse_chan=[62, 63, 69, 70, 76, 77, 84, 85, 93, 94, 103, 104]
+	timerange='02:46:00~02:55:52'
 	
 if __name__=='__main__':
 	main()	
